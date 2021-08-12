@@ -14,9 +14,7 @@ import webbrowser
 from sklearn import preprocessing, cluster
 import scipy.cluster as scipy_cluster
 
-
-# import minisom
-
+from analysis.utils import Utils
 
 class TaxiFleetAnalyser:
     ROOT_DIR = dirname(dirname(abspath(__file__)))
@@ -63,22 +61,6 @@ class TaxiFleetAnalyser:
 
         return self.taxi_data
 
-    def haversine_distance(self, latitude1: float, longitude1: float, latitude2: float, longitude2: float) -> float:
-        EARTH_RADIUS = 6367
-        KM2Mile = 0.621371
-        lon1, lat1, lon2, lat2 = map(np.radians, [longitude1, latitude1, longitude2, latitude2])
-
-        dlon = lon2 - lon1
-        dlat = lat2 - lat1
-
-        a = np.sin(dlat / 2.0) ** 2 + np.cos(lat1) * np.cos(lat2) * np.sin(dlon / 2.0) ** 2
-
-        c = 2 * np.arcsin(np.sqrt(a))
-
-        mile = EARTH_RADIUS * c * KM2Mile
-
-        return mile
-
     def add_features_for_each_ride(self, df):
         cur_ride = pd.DataFrame()
 
@@ -96,7 +78,7 @@ class TaxiFleetAnalyser:
 
         # distance (Mile)
         cur_ride['distance'] = [
-            self.haversine_distance(df['latitude'], df['longitude'], df['latitude'].shift(),
+            Utils.haversine_distance(df['latitude'], df['longitude'], df['latitude'].shift(),
                                     df['longitude'].shift()).sum()]
 
         # duration (Sec)
@@ -152,9 +134,6 @@ class TaxiFleetAnalyser:
                 .format(potenital_yearly_emission_reduction / (1000000)))
         return potenital_yearly_emission_reduction
 
-    def get_hour_bin(self, hour):
-        hour_bin_number = (hour % 24 + 4) // 4
-        return hour_bin_number
 
     def postprocess_occupied_ride_data(self, df, quant_val=0.0001, sample_frac=0.02, show_plot=False):
 
@@ -170,7 +149,7 @@ class TaxiFleetAnalyser:
         df1.loc[:, 'day_of_month'] = df['start_time'].dt.day
         df1.loc[:, 'day_of_week'] = df['start_time'].dt.dayofweek
         df1.loc[:, 'hour'] = df['start_time'].dt.hour
-        df1.loc[:, 'periods'] = self.get_hour_bin(df1['hour'])
+        df1.loc[:, 'periods'] = Utils.get_hour_bin(df1['hour'])
 
         df1['periods'].replace(self.periods, inplace=True)
 
@@ -330,7 +309,7 @@ class TaxiFleetAnalyser:
         cur_lats = np.array([cur_latitude] * number_of_centroids, dtype=float)
         cur_lons = np.array([cur_longitude] * number_of_centroids, dtype=float)
 
-        distances = self.haversine_distance(cur_lats, cur_lons, np.array(centroids[self.LATITUDE], dtype=float),
+        distances = Utils.haversine_distance(cur_lats, cur_lons, np.array(centroids[self.LATITUDE], dtype=float),
                                             np.array(centroids[self.LONGITUDE], dtype=float))
 
         closest_clusters = centroids.iloc[np.argsort(distances)][:number_of_recommendations]
