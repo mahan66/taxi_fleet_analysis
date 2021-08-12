@@ -5,16 +5,9 @@ from os.path import dirname, abspath, join
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
-import seaborn as sns
-
-import folium
-from IPython.core.display import display, HTML
-import webbrowser
-
-from sklearn import preprocessing, cluster
-import scipy.cluster as scipy_cluster
 
 from analysis.utils import Utils
+from analysis.models import Models
 
 class TaxiFleetAnalyser:
     ROOT_DIR = dirname(dirname(abspath(__file__)))
@@ -162,130 +155,6 @@ class TaxiFleetAnalyser:
             plt.scatter(X[:, 0], X[:, 1], alpha=0.2, s=50)
         return df
 
-    def map_auto_open(self, map, file_name='map.html'):
-        map_path = join(TaxiFleetAnalyser.ROOT_DIR, TaxiFleetAnalyser.OUTPUT_DIR_NAME, file_name)
-        html_page = f'{map_path}'
-        map.save(html_page)
-        # open in browser.
-        new = 2
-        webbrowser.open(html_page, new=new)
-
-    def plot_on_map(self, df, lat=LATITUDE, lon=LONGITUDE):
-        color = "cluster"
-        size = "size"
-        popup = 'taxi_title'
-        marker = "centroids"
-
-        df[size] = 3
-        data = df
-
-        ## create color column
-        lst_elements = sorted(list(df[color].unique()))
-        lst_colors = ['#%06X' % np.random.randint(0, 0xFFFFFF) for i in range(len(lst_elements))]
-        data["color"] = data[color].apply(lambda x: lst_colors[lst_elements.index(x)])
-
-        ## create size column (scaled)
-        scaler = preprocessing.MinMaxScaler(feature_range=(3, 15))
-        data["size"] = scaler.fit_transform(data[size].values.reshape(-1, 1)).reshape(-1)
-
-        ## initialize the map with the starting location
-        map_ = folium.Map(location=[data[lat].mean(), data[lon].mean()], tiles="cartodbpositron", zoom_start=11)
-
-        ## add points
-        data.apply(lambda row: folium.CircleMarker(
-            location=[row[lat], row[lon]], popup=row[popup],
-            color=row["color"], fill=True,
-            radius=row["size"]).add_to(map_), axis=1)
-
-        ## add html legend
-        legend_html = """<div style="position:fixed; bottom:10px; left:10px; border:2px solid black; z-index:9999; font-size:14px;">&nbsp;<b>""" + color + """:</b><br>"""
-        for i in lst_elements:
-            legend_html = legend_html + """&nbsp;<i class="fa fa-circle 
-          fa-1x" style="color:""" + lst_colors[lst_elements.index(i)] + """">
-          </i>&nbsp;""" + str(i) + """<br>"""
-        legend_html = legend_html + """</div>"""
-        map_.get_root().html.add_child(folium.Element(legend_html))
-        ## add centroids marker
-        lst_elements = sorted(list(df[marker].unique()))
-        data[data[marker] == 1].apply(lambda row: folium.Marker(location=[row[lat], row[lon]],
-                                                                popup=str(row[marker]), draggable=False,
-                                                                icon=folium.Icon(color="black")).
-                                      add_to(map_), axis=1)
-        ## plot the map
-        # display(map_)
-        self.map_auto_open(map_)
-
-    def find_best_k_for_KMeans(self, df, show_plot=False, lat=LATITUDE, lon=LONGITUDE, max_k=30):
-
-        # select start latitude and start longitiude from the rides
-        X = df[[lat, lon]]
-
-        ## sum of squared error of the models
-        ssd = []
-        for i in range(1, max_k + 1):
-            if len(X) >= i:
-                model = cluster.KMeans(n_clusters=i, init='k-means++', max_iter=300, n_init=10, random_state=0)
-                model.fit(X)
-                ssd.append(model.inertia_)
-
-        ## best k: the lowest derivative
-        k = [i * 100 for i in np.diff(ssd, 2)].index(min([i * 100 for i in np.diff(ssd, 2)]))
-
-        ## plot
-        if show_plot:
-            fig, ax = plt.subplots()
-            ax.plot(range(1, len(ssd) + 1), ssd)
-            ax.axvline(k, ls='--', color="red", label="k = " + str(k))
-            ax.set(title='The Elbow Method', xlabel='Number of clusters', ylabel="SSD Error")
-            ax.legend()
-            ax.grid(True)
-            plt.show()
-
-        return k
-
-    def cluster_locations(self, df, lat=LATITUDE, lon=LONGITUDE, method='kmeans', number_of_clusters=None,
-                          show_plot=False, show_on_map=False):
-        # define clustering method
-        if method == 'kmeans':
-            k = number_of_clusters
-            if not k:
-                k = self.find_best_k_for_KMeans(df)
-            model = cluster.KMeans(n_clusters=k, init='k-means++')
-
-        X = df[[lat, lon]]
-
-        ## clustering
-        df_X = X
-        df_X["cluster"] = model.fit_predict(X)
-
-        ## find real centroids
-        closest, distances = scipy_cluster.vq.vq(model.cluster_centers_, df_X.drop("cluster", axis=1).values)
-
-        # define centroids
-        df_X['centroids'] = 0
-        for i in closest:
-            df_X['centroids'].iloc[i] = 1
-
-        ## add clustering info to the original dataset
-        df.loc[:, ['cluster', 'centroids']] = df_X.loc[:, ['cluster', 'centroids']]
-        # df['cluster'] = df_X['cluster']
-        # df['centroids'] = df_X['centroids']
-
-        ## plot
-        if show_plot:
-            fig, ax = plt.subplots()
-            sns.scatterplot(x=lat, y=lon, data=df, palette=sns.color_palette("bright", k),
-                            hue='cluster', size="centroids", size_order=[1, 0],
-                            legend="brief", ax=ax).set_title('Clustering (k=' + str(k) + ')')
-
-            centroids = model.cluster_centers_
-            ax.scatter(centroids[:, 0], centroids[:, 1], s=50, c='black', marker="x")
-
-        if show_on_map:
-            self.plot_on_map(df)
-
-        return df, model
-
     def recommend_next_location(self, cur_latitude, cur_longitude, df=None, model=None, prediction_method='kmeans',
                                 show_plot=False, show_on_map=False, sample_frac=0.02, date_time=None):
 
@@ -296,7 +165,7 @@ class TaxiFleetAnalyser:
             df = df[df['hour'] == cur_hour]
 
         if not model:
-            df, model = self.cluster_locations(df, method=prediction_method, show_on_map=show_on_map,
+            df, model = Models.cluster_locations(df, method=prediction_method, show_on_map=show_on_map,
                                                show_plot=show_plot)
 
         centroids = df.loc[df['centroids'] == 1].sort_values(by='cluster')
@@ -330,7 +199,7 @@ class TaxiFleetAnalyser:
             if hour_bin:
                 df = df[df['periods'] == hour_bin]
 
-            df, model = self.cluster_locations(df, method=prediction_method, show_on_map=show_on_map,
+            df, model = Models.cluster_locations(df, method=prediction_method, show_on_map=show_on_map,
                                                show_plot=show_plot)
 
         # cluster taxi cabs based on the number taxi cabs in the clusters of their pickup locations

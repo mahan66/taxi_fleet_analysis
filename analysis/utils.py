@@ -1,5 +1,13 @@
 import numpy as np
+from os.path import join, dirname, abspath
+import webbrowser
+
+
+
 class Utils:
+    ROOT_DIR = dirname(dirname(abspath(__file__)))
+    DATASET_DIR_NAME = 'taxicab_dataset'
+    OUTPUT_DIR_NAME = 'output_files'
     @staticmethod
     def haversine_distance(latitude1: float, longitude1: float, latitude2: float, longitude2: float) -> float:
         EARTH_RADIUS = 6367
@@ -21,3 +29,12 @@ class Utils:
     def get_hour_bin(hour):
         hour_bin_number = (hour % 24 + 4) // 4
         return hour_bin_number
+
+    @staticmethod
+    def map_auto_open(map, file_name='map.html'):
+        map_path = join(Utils.ROOT_DIR, Utils.OUTPUT_DIR_NAME, file_name)
+        html_page = f'{map_path}'
+        map.save(html_page)
+        # open in browser.
+        new = 2
+        webbrowser.open(html_page, new=new)
